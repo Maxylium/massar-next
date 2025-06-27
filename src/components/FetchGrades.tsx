@@ -25,10 +25,9 @@ import {
 } from '@mui/material';
 import { teal, blue } from '@mui/material/colors';
 import axios from 'axios';
-import { parseMassarGrades, MassarGradesParsed, MassarCCRow, MassarExamRow } from '../utils/parseMassarGrades';
+import { parseMassarGrades } from '../utils/parseMassarGrades';
 import { Chart, registerables } from 'chart.js';
 import { saveAs } from 'file-saver';
-import type { SelectChangeEvent } from '@mui/material/Select';
 
 const theme = createTheme({
   palette: {
@@ -45,24 +44,6 @@ interface FetchGradesForm {
   year: string;
 }
 
-const yearOptions = [
-  '2015/2016',
-  '2016/2017',
-  '2017/2018',
-  '2018/2019',
-  '2019/2020',
-  '2020/2021',
-  '2021/2022',
-  '2022/2023',
-  '2023/2024',
-  '2024/2025',
-];
-const semesterOptions = [
-  { value: '1', label: 'Semester 1' },
-  { value: '2', label: 'Semester 2' },
-  { value: '3', label: 'Moyenne Annuelle' },
-];
-
 const FetchGrades: React.FC = () => {
   const [form, setForm] = useState<FetchGradesForm>({
     username: '',
@@ -70,40 +51,57 @@ const FetchGrades: React.FC = () => {
     semester: '1',
     year: '2024/2025',
   });
+  const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [parsed, setParsed] = useState<MassarGradesParsed | null>(null);
+  const [parsed, setParsed] = useState<any>(null);
   const chartRef = React.useRef<HTMLCanvasElement | null>(null);
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const yearOptions = [
+    '2015/2016',
+    '2016/2017',
+    '2017/2018',
+    '2018/2019',
+    '2019/2020',
+    '2020/2021',
+    '2021/2022',
+    '2022/2023',
+    '2023/2024',
+    '2024/2025',
+  ];
+  const semesterOptions = [
+    { value: '1', label: 'Semester 1' },
+    { value: '2', label: 'Semester 2' },
+    { value: '3', label: 'Moyenne Annuelle' },
+  ];
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  // Fix: Use the correct type for MUI Select's onChange handler
   const handleSelectChange = (
-    event: React.ChangeEvent<HTMLInputElement> | React.ChangeEvent<HTMLTextAreaElement> | SelectChangeEvent<string>
+    event: React.ChangeEvent<{ name?: string; value: unknown }> | React.ChangeEvent<HTMLInputElement> | any
   ) => {
-    const target = event.target as HTMLInputElement & { name?: string; value: unknown };
-    const name = target.name as keyof FetchGradesForm;
-    setForm({ ...form, [name]: target.value as string });
+    const name = event.target.name as string;
+    setForm({ ...form, [name]: event.target.value as string });
   };
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setResult(null);
     setParsed(null);
     try {
       const res = await axios.post('/api/fetch-grades', form);
-      const parsedData: MassarGradesParsed | null = parseMassarGrades(res.data.rawHTML);
+      setResult(res.data.rawHTML);
+      const parsedData = parseMassarGrades(res.data.rawHTML);
       setParsed(parsedData);
-    } catch (err) {
-      if (axios.isAxiosError(err) && err.response?.data?.error === 'Login failed') {
+    } catch (err: any) {
+      if (err.response?.data?.error === 'Login failed') {
         setError('Incorrect Massar code or password. Please try again.');
-      } else if (axios.isAxiosError(err)) {
-        setError(err.response?.data?.error || 'Something went wrong.');
       } else {
-        setError('Something went wrong.');
+        setError(err.response?.data?.error || 'Something went wrong.');
       }
     } finally {
       setLoading(false);
@@ -116,9 +114,7 @@ const FetchGrades: React.FC = () => {
     if (saved) {
       try {
         setForm(JSON.parse(saved));
-      } catch {
-        // ignore
-      }
+      } catch {}
     }
   }, []);
 
@@ -133,17 +129,17 @@ const FetchGrades: React.FC = () => {
       const ctx = chartRef.current.getContext('2d');
       if (!ctx) return;
       // Destroy previous chart instance if exists
-      if ((window as unknown as { massarChart?: Chart }).massarChart) {
-        (window as unknown as { massarChart?: Chart }).massarChart?.destroy();
+      if ((window as any).massarChart) {
+        (window as any).massarChart.destroy();
       }
-      (window as unknown as { massarChart?: Chart }).massarChart = new Chart(ctx, {
+      (window as any).massarChart = new Chart(ctx, {
         type: 'radar',
         data: {
-          labels: parsed.examRows.map((row: MassarExamRow) => row.matiere),
+          labels: parsed.examRows.map((row: any) => row.matiere),
           datasets: [
             {
               label: 'Notes CC',
-              data: parsed.examRows.map((row: MassarExamRow) => parseFloat(row.noteCC.replace(',', '.')) || 0),
+              data: parsed.examRows.map((row: any) => parseFloat(row.noteCC.replace(',', '.')) || 0),
               backgroundColor: 'rgba(33, 150, 243, 0.2)',
               borderColor: 'rgba(33, 150, 243, 1)',
               borderWidth: 2,
@@ -151,7 +147,7 @@ const FetchGrades: React.FC = () => {
             },
             {
               label: 'Note Moyenne Classe',
-              data: parsed.examRows.map((row: MassarExamRow) => parseFloat(row.noteMoyClasse.replace(',', '.')) || 0),
+              data: parsed.examRows.map((row: any) => parseFloat(row.noteMoyClasse.replace(',', '.')) || 0),
               backgroundColor: 'rgba(0, 150, 136, 0.2)',
               borderColor: 'rgba(0, 150, 136, 1)',
               borderWidth: 2,
@@ -177,29 +173,29 @@ const FetchGrades: React.FC = () => {
     }
   }, [parsed]);
 
-  function toCSV<T, K extends keyof T>(rows: T[], headers: K[]): string {
+  function toCSV(rows: any[], headers: string[]): string {
     const escape = (v: string) => '"' + (v || '').replace(/"/g, '""') + '"';
-    const csvRows = [headers.map(h => escape(String(h))).join(',')];
+    const csvRows = [headers.map(escape).join(',')];
     for (const row of rows) {
-      csvRows.push(headers.map(h => escape(String(row[h] ?? ''))).join(','));
+      csvRows.push(headers.map(h => escape(row[h] || '')).join(','));
     }
     return csvRows.join('\n');
   }
 
-  function downloadCSV(parsed: MassarGradesParsed) {
+  function downloadCSV(parsed: any) {
     if (!parsed) return;
-    const examHeaders: Array<keyof MassarExamRow> = [
+    const examHeaders = [
       'matiere', 'noteCC', 'coefficient', 'noteMax', 'noteMoyClasse', 'noteMin', 'noteExam'
     ];
     const ccHeaders = ['matiere', 'Contrôle 1', 'Contrôle 2', 'Contrôle 3', 'Contrôle 4', 'Activités intégrées'];
-    const ccRows: Record<string, string>[] = parsed.ccRows.map((row) => {
-      const out: Record<string, string> = { matiere: row.matiere };
-      row.notes.forEach((n, i) => { out[ccHeaders[i + 1]] = n; });
+    const ccRows = parsed.ccRows.map((row: any) => {
+      const out: any = { matiere: row.matiere };
+      row.notes.forEach((n: string, i: number) => { out[ccHeaders[i + 1]] = n; });
       return out;
     });
     let csv = 'Notes Controls Continues\n';
-    csv += toCSV(ccRows, ccHeaders as (keyof typeof ccRows[0])[]) + '\n\nNotes Examens\n';
-    csv += toCSV(parsed.examRows as unknown as Record<string, string>[], examHeaders as unknown as string[]);
+    csv += toCSV(ccRows, ccHeaders) + '\n\nNotes Examens\n';
+    csv += toCSV(parsed.examRows, examHeaders);
     saveAs(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'massar-grades.csv');
   }
 
@@ -318,10 +314,10 @@ const FetchGrades: React.FC = () => {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {parsed.ccRows.map((row: MassarCCRow, i: number) => (
+                          {parsed.ccRows.map((row: any, i: number) => (
                             <TableRow key={i}>
                               <TableCell>{row.matiere}</TableCell>
-                              {row.notes.map((note, j) => (
+                              {row.notes.map((note: string, j: number) => (
                                 <TableCell key={j}>{note}</TableCell>
                               ))}
                               {Array.from({ length: 5 - row.notes.length }).map((_, k) => (
@@ -351,7 +347,7 @@ const FetchGrades: React.FC = () => {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {parsed.examRows.map((row: MassarExamRow, i: number) => (
+                          {parsed.examRows.map((row: any, i: number) => (
                             <TableRow key={i}>
                               <TableCell>{row.matiere}</TableCell>
                               <TableCell>{row.noteCC}</TableCell>
