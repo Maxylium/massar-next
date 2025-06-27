@@ -93,7 +93,7 @@ const FetchGrades: React.FC = () => {
     setParsed(null);
     try {
       const res = await axios.post('/api/fetch-grades', form);
-      const parsedData = parseMassarGrades(res.data.rawHTML);
+      const parsedData: MassarGradesParsed | null = parseMassarGrades(res.data.rawHTML);
       setParsed(parsedData);
     } catch (err: any) {
       if (err.response?.data?.error === 'Login failed') {
@@ -171,28 +171,28 @@ const FetchGrades: React.FC = () => {
     }
   }, [parsed]);
 
-  function toCSV(rows: any[], headers: string[]): string {
+  function toCSV(rows: MassarCCRow[] | MassarExamRow[], headers: string[]): string {
     const escape = (v: string) => '"' + (v || '').replace(/"/g, '""') + '"';
     const csvRows = [headers.map(escape).join(',')];
     for (const row of rows) {
-      csvRows.push(headers.map(h => escape(row[h] || '')).join(','));
+      csvRows.push(headers.map(h => escape((row as any)[h] || '')).join(','));
     }
     return csvRows.join('\n');
   }
 
-  function downloadCSV(parsed: any) {
+  function downloadCSV(parsed: MassarGradesParsed) {
     if (!parsed) return;
     const examHeaders = [
       'matiere', 'noteCC', 'coefficient', 'noteMax', 'noteMoyClasse', 'noteMin', 'noteExam'
     ];
     const ccHeaders = ['matiere', 'Contrôle 1', 'Contrôle 2', 'Contrôle 3', 'Contrôle 4', 'Activités intégrées'];
-    const ccRows = parsed.ccRows.map((row: any) => {
-      const out: any = { matiere: row.matiere };
+    const ccRows = parsed.ccRows.map((row: MassarCCRow) => {
+      const out: Record<string, string> = { matiere: row.matiere };
       row.notes.forEach((n: string, i: number) => { out[ccHeaders[i + 1]] = n; });
       return out;
     });
     let csv = 'Notes Controls Continues\n';
-    csv += toCSV(ccRows, ccHeaders) + '\n\nNotes Examens\n';
+    csv += toCSV(parsed.ccRows, ccHeaders) + '\n\nNotes Examens\n';
     csv += toCSV(parsed.examRows, examHeaders);
     saveAs(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'massar-grades.csv');
   }
