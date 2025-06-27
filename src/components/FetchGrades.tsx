@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, ChangeEvent, FormEvent } from 'react';
 import {
   Box,
   Button,
@@ -25,9 +25,10 @@ import {
 } from '@mui/material';
 import { teal, blue } from '@mui/material/colors';
 import axios from 'axios';
-import { parseMassarGrades } from '../utils/parseMassarGrades';
+import { parseMassarGrades, MassarGradesParsed, MassarCCRow, MassarExamRow } from '../utils/parseMassarGrades';
 import { Chart, registerables } from 'chart.js';
 import { saveAs } from 'file-saver';
+import type { SelectChangeEvent } from '@mui/material/Select';
 
 const theme = createTheme({
   palette: {
@@ -44,6 +45,24 @@ interface FetchGradesForm {
   year: string;
 }
 
+const yearOptions = [
+  '2015/2016',
+  '2016/2017',
+  '2017/2018',
+  '2018/2019',
+  '2019/2020',
+  '2020/2021',
+  '2021/2022',
+  '2022/2023',
+  '2023/2024',
+  '2024/2025',
+];
+const semesterOptions = [
+  { value: '1', label: 'Semester 1' },
+  { value: '2', label: 'Semester 2' },
+  { value: '3', label: 'Moyenne Annuelle' },
+];
+
 const FetchGrades: React.FC = () => {
   const [form, setForm] = useState<FetchGradesForm>({
     username: '',
@@ -56,36 +75,20 @@ const FetchGrades: React.FC = () => {
   const [parsed, setParsed] = useState<MassarGradesParsed | null>(null);
   const chartRef = React.useRef<HTMLCanvasElement | null>(null);
 
-  const yearOptions = [
-    '2015/2016',
-    '2016/2017',
-    '2017/2018',
-    '2018/2019',
-    '2019/2020',
-    '2020/2021',
-    '2021/2022',
-    '2022/2023',
-    '2023/2024',
-    '2024/2025',
-  ];
-  const semesterOptions = [
-    { value: '1', label: 'Semester 1' },
-    { value: '2', label: 'Semester 2' },
-    { value: '3', label: 'Moyenne Annuelle' },
-  ];
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  // Fix: Use the correct type for MUI Select's onChange handler
   const handleSelectChange = (
-    event: React.ChangeEvent<{ name?: string; value: unknown }> | React.ChangeEvent<HTMLInputElement> | any
+    event: React.ChangeEvent<HTMLInputElement> | React.ChangeEvent<HTMLTextAreaElement> | SelectChangeEvent<string>
   ) => {
-    const name = event.target.name as string;
-    setForm({ ...form, [name]: event.target.value as string });
+    const target = event.target as HTMLInputElement & { name?: string; value: unknown };
+    const name = target.name as keyof FetchGradesForm;
+    setForm({ ...form, [name]: target.value as string });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
@@ -94,11 +97,13 @@ const FetchGrades: React.FC = () => {
       const res = await axios.post('/api/fetch-grades', form);
       const parsedData: MassarGradesParsed | null = parseMassarGrades(res.data.rawHTML);
       setParsed(parsedData);
-    } catch (err: any) {
-      if (err.response?.data?.error === 'Login failed') {
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.data?.error === 'Login failed') {
         setError('Incorrect Massar code or password. Please try again.');
-      } else {
+      } else if (axios.isAxiosError(err)) {
         setError(err.response?.data?.error || 'Something went wrong.');
+      } else {
+        setError('Something went wrong.');
       }
     } finally {
       setLoading(false);
@@ -111,7 +116,9 @@ const FetchGrades: React.FC = () => {
     if (saved) {
       try {
         setForm(JSON.parse(saved));
-      } catch {}
+      } catch {
+        // ignore
+      }
     }
   }, []);
 
@@ -126,17 +133,17 @@ const FetchGrades: React.FC = () => {
       const ctx = chartRef.current.getContext('2d');
       if (!ctx) return;
       // Destroy previous chart instance if exists
-      if ((window as any).massarChart) {
-        (window as any).massarChart.destroy();
+      if ((window as unknown as { massarChart?: Chart }).massarChart) {
+        (window as unknown as { massarChart?: Chart }).massarChart?.destroy();
       }
-      (window as any).massarChart = new Chart(ctx, {
+      (window as unknown as { massarChart?: Chart }).massarChart = new Chart(ctx, {
         type: 'radar',
         data: {
-          labels: parsed.examRows.map((row: any) => row.matiere),
+          labels: parsed.examRows.map((row: MassarExamRow) => row.matiere),
           datasets: [
             {
               label: 'Notes CC',
-              data: parsed.examRows.map((row: any) => parseFloat(row.noteCC.replace(',', '.')) || 0),
+              data: parsed.examRows.map((row: MassarExamRow) => parseFloat(row.noteCC.replace(',', '.')) || 0),
               backgroundColor: 'rgba(33, 150, 243, 0.2)',
               borderColor: 'rgba(33, 150, 243, 1)',
               borderWidth: 2,
@@ -144,7 +151,7 @@ const FetchGrades: React.FC = () => {
             },
             {
               label: 'Note Moyenne Classe',
-              data: parsed.examRows.map((row: any) => parseFloat(row.noteMoyClasse.replace(',', '.')) || 0),
+              data: parsed.examRows.map((row: MassarExamRow) => parseFloat(row.noteMoyClasse.replace(',', '.')) || 0),
               backgroundColor: 'rgba(0, 150, 136, 0.2)',
               borderColor: 'rgba(0, 150, 136, 1)',
               borderWidth: 2,
@@ -181,7 +188,7 @@ const FetchGrades: React.FC = () => {
 
   function downloadCSV(parsed: MassarGradesParsed) {
     if (!parsed) return;
-    const examHeaders = [
+    const examHeaders: Array<keyof MassarExamRow> = [
       'matiere', 'noteCC', 'coefficient', 'noteMax', 'noteMoyClasse', 'noteMin', 'noteExam'
     ];
     const ccHeaders = ['matiere', 'Contrôle 1', 'Contrôle 2', 'Contrôle 3', 'Contrôle 4', 'Activités intégrées'];
@@ -191,8 +198,8 @@ const FetchGrades: React.FC = () => {
       return out;
     });
     let csv = 'Notes Controls Continues\n';
-    csv += toCSV(ccRows, ccHeaders) + '\n\nNotes Examens\n';
-    csv += toCSV(parsed.examRows as unknown as Record<string, string>[], examHeaders);
+    csv += toCSV(ccRows, ccHeaders as (keyof typeof ccRows[0])[]) + '\n\nNotes Examens\n';
+    csv += toCSV(parsed.examRows as unknown as Record<string, string>[], examHeaders as unknown as string[]);
     saveAs(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'massar-grades.csv');
   }
 
