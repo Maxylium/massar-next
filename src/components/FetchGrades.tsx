@@ -171,11 +171,11 @@ const FetchGrades: React.FC = () => {
     }
   }, [parsed]);
 
-  function toCSV(rows: MassarCCRow[] | MassarExamRow[], headers: string[]): string {
+  function toCSV<T, K extends keyof T>(rows: T[], headers: K[]): string {
     const escape = (v: string) => '"' + (v || '').replace(/"/g, '""') + '"';
-    const csvRows = [headers.map(escape).join(',')];
+    const csvRows = [headers.map(h => escape(String(h))).join(',')];
     for (const row of rows) {
-      csvRows.push(headers.map(h => escape((row as any)[h] || '')).join(','));
+      csvRows.push(headers.map(h => escape(String(row[h] ?? ''))).join(','));
     }
     return csvRows.join('\n');
   }
@@ -186,14 +186,14 @@ const FetchGrades: React.FC = () => {
       'matiere', 'noteCC', 'coefficient', 'noteMax', 'noteMoyClasse', 'noteMin', 'noteExam'
     ];
     const ccHeaders = ['matiere', 'Contrôle 1', 'Contrôle 2', 'Contrôle 3', 'Contrôle 4', 'Activités intégrées'];
-    const ccRows = parsed.ccRows.map((row: MassarCCRow) => {
+    const ccRows: Record<string, string>[] = parsed.ccRows.map((row) => {
       const out: Record<string, string> = { matiere: row.matiere };
-      row.notes.forEach((n: string, i: number) => { out[ccHeaders[i + 1]] = n; });
+      row.notes.forEach((n, i) => { out[ccHeaders[i + 1]] = n; });
       return out;
     });
     let csv = 'Notes Controls Continues\n';
-    csv += toCSV(parsed.ccRows, ccHeaders) + '\n\nNotes Examens\n';
-    csv += toCSV(parsed.examRows, examHeaders);
+    csv += toCSV(ccRows, ccHeaders) + '\n\nNotes Examens\n';
+    csv += toCSV(parsed.examRows as unknown as Record<string, string>[], examHeaders);
     saveAs(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'massar-grades.csv');
   }
 
@@ -315,7 +315,7 @@ const FetchGrades: React.FC = () => {
                           {parsed.ccRows.map((row: MassarCCRow, i: number) => (
                             <TableRow key={i}>
                               <TableCell>{row.matiere}</TableCell>
-                              {row.notes.map((note: string, j: number) => (
+                              {row.notes.map((note, j) => (
                                 <TableCell key={j}>{note}</TableCell>
                               ))}
                               {Array.from({ length: 5 - row.notes.length }).map((_, k) => (
