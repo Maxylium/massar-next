@@ -28,7 +28,6 @@ import axios from 'axios';
 import { parseMassarGrades } from '../utils/parseMassarGrades';
 import { Chart, registerables } from 'chart.js';
 import { saveAs } from 'file-saver';
-import type { MassarGradesParsed, MassarCCRow, MassarExamRow } from '../utils/parseMassarGrades';
 
 const theme = createTheme({
   palette: {
