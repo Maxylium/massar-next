@@ -28,6 +28,7 @@ import axios from 'axios';
 import { parseMassarGrades } from '../utils/parseMassarGrades';
 import { Chart, registerables } from 'chart.js';
 import { saveAs } from 'file-saver';
+import type { MassarGradesParsed, MassarCCRow, MassarExamRow } from '../utils/parseMassarGrades';
 
 const theme = createTheme({
   palette: {
@@ -51,10 +52,9 @@ const FetchGrades: React.FC = () => {
     semester: '1',
     year: '2024/2025',
   });
-  const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [parsed, setParsed] = useState<any>(null);
+  const [parsed, setParsed] = useState<MassarGradesParsed | null>(null);
   const chartRef = React.useRef<HTMLCanvasElement | null>(null);
 
   const yearOptions = [
@@ -90,11 +90,9 @@ const FetchGrades: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setResult(null);
     setParsed(null);
     try {
       const res = await axios.post('/api/fetch-grades', form);
-      setResult(res.data.rawHTML);
       const parsedData = parseMassarGrades(res.data.rawHTML);
       setParsed(parsedData);
     } catch (err: any) {
@@ -314,7 +312,7 @@ const FetchGrades: React.FC = () => {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {parsed.ccRows.map((row: any, i: number) => (
+                          {parsed.ccRows.map((row: MassarCCRow, i: number) => (
                             <TableRow key={i}>
                               <TableCell>{row.matiere}</TableCell>
                               {row.notes.map((note: string, j: number) => (
@@ -347,7 +345,7 @@ const FetchGrades: React.FC = () => {
                           </TableRow>
                         </TableHead>
                         <TableBody>
-                          {parsed.examRows.map((row: any, i: number) => (
+                          {parsed.examRows.map((row: MassarExamRow, i: number) => (
                             <TableRow key={i}>
                               <TableCell>{row.matiere}</TableCell>
                               <TableCell>{row.noteCC}</TableCell>
