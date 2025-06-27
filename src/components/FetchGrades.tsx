@@ -27,6 +27,7 @@ import { teal, blue } from '@mui/material/colors';
 import axios from 'axios';
 import { parseMassarGrades } from '../utils/parseMassarGrades';
 import { Chart, registerables } from 'chart.js';
+import { saveAs } from 'file-saver';
 
 const theme = createTheme({
   palette: {
@@ -97,11 +98,30 @@ const FetchGrades: React.FC = () => {
       const parsedData = parseMassarGrades(res.data.rawHTML);
       setParsed(parsedData);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Something went wrong.');
+      if (err.response?.data?.error === 'Login failed') {
+        setError('Incorrect Massar code or password. Please try again.');
+      } else {
+        setError(err.response?.data?.error || 'Something went wrong.');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // Load credentials from localStorage on mount
+    const saved = localStorage.getItem('massar-credentials');
+    if (saved) {
+      try {
+        setForm(JSON.parse(saved));
+      } catch {}
+    }
+  }, []);
+
+  useEffect(() => {
+    // Save credentials to localStorage on change
+    localStorage.setItem('massar-credentials', JSON.stringify(form));
+  }, [form]);
 
   useEffect(() => {
     if (parsed && chartRef.current && parsed.examRows.length > 0) {
@@ -118,6 +138,87 @@ const FetchGrades: React.FC = () => {
           labels: parsed.examRows.map((row: any) => row.matiere),
           datasets: [
             {
+              label: 'Notes CC',
+              data: parsed.examRows.map((row: any) => parseFloat(row.noteCC.replace(',', '.')) || 0),
+              backgroundColor: 'rgba(33, 150, 243, 0.2)',
+              borderColor: 'rgba(33, 150, 243, 1)',
+              borderWidth: 2,
+              pointBackgroundColor: 'rgba(33, 150, 243, 1)',
+            },
+            {
+              label: 'Note Moyenne Classe',
+              data: parsed.examRows.map((row: any) => parseFloat(row.noteMoyClasse.replace(',', '.')) || 0),
+              backgroundColor: 'rgba(0, 150, 136, 0.2)',
+              borderColor: 'rgba(0, 150, 136, 1)',
+              borderWidth: 2,
+              pointBackgroundColor: 'rgba(0, 150, 136, 1)',
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'top' },
+            title: { display: true, text: 'Comparatif Notes' },
+          },
+          scales: {
+            r: {
+              min: 0,
+              max: 20,
+              ticks: { stepSize: 2 },
+            },
+          },
+        },
+      });
+    }
+  }, [parsed]);
+
+  function toCSV(rows: any[], headers: string[]): string {
+    const escape = (v: string) => '"' + (v || '').replace(/"/g, '""') + '"';
+    const csvRows = [headers.map(escape).join(',')];
+    for (const row of rows) {
+      csvRows.push(headers.map(h => escape(row[h] || '')).join(','));
+    }
+    return csvRows.join('\n');
+  }
+
+  function downloadCSV(parsed: any) {
+    if (!parsed) return;
+    const examHeaders = [
+      'matiere', 'noteCC', 'coefficient', 'noteMax', 'noteMoyClasse', 'noteMin', 'noteExam'
+    ];
+    const ccHeaders = ['matiere', 'Contrôle 1', 'Contrôle 2', 'Contrôle 3', 'Contrôle 4', 'Activités intégrées'];
+    const ccRows = parsed.ccRows.map((row: any) => {
+      const out: any = { matiere: row.matiere };
+      row.notes.forEach((n: string, i: number) => { out[ccHeaders[i + 1]] = n; });
+      return out;
+    });
+    let csv = 'Notes Controls Continues\n';
+    csv += toCSV(ccRows, ccHeaders) + '\n\nNotes Examens\n';
+    csv += toCSV(parsed.examRows, examHeaders);
+    saveAs(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'massar-grades.csv');
+  }
+
+  return (
+    <ThemeProvider theme={theme}>
+      <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', py: 8, transition: 'background 0.5s' }}>
+        <Container maxWidth="md">
+          <Paper elevation={6} sx={{ p: 4, borderRadius: 4, boxShadow: 6, transition: 'box-shadow 0.3s', ':hover': { boxShadow: 12 } }}>
+            <Typography variant="h3" color="primary" fontWeight={700} gutterBottom align="center" sx={{ letterSpacing: 1 }}>
+              Massar Grade Fetcher
+            </Typography>
+            <Typography variant="subtitle1" color="secondary" align="center" mb={3} sx={{ fontStyle: 'italic' }}>
+              Welcome! Enter your Massar credentials to fetch your grades..
+            </Typography>
+            <Typography variant="subtitle2" color="text.secondary" align="center" mb={2} sx={{ fontSize: 14 }}>
+              <b>Note: If massar is truly down, there is nothing this can do for ya</b> 
+            </Typography>
+            <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <TextField
+                label="Massar Code, Ig:A123456789@taalim.ma"
+                name="username"
+                value={form.username}
+                onChange={handleInputChange}
                 variant="outlined"
                 required
                 fullWidth
@@ -183,12 +284,12 @@ const FetchGrades: React.FC = () => {
             )}
             {parsed && (
               <Box sx={{ mt: 4 }}>
-                <Card sx={{ mb: 3, bgcolor: '#e3f2fd' }}>
+                <Card sx={{ mb: 3, bgcolor: '#e3f2fd', borderRadius: 3, boxShadow: 2, transition: 'box-shadow 0.3s', ':hover': { boxShadow: 6 } }}>
                   <CardContent>
-                    <Typography variant="h6" color="primary" fontWeight={600} gutterBottom>
+                    <Typography variant="h6" color="primary" fontWeight={600} gutterBottom sx={{ letterSpacing: 0.5 }}>
                       {parsed.summary.etablissement}
                     </Typography>
-                    <Typography variant="body1">
+                    <Typography variant="body1" sx={{ fontSize: 16 }}>
                       <b>Niveau:</b> {parsed.summary.niveau} <br />
                       <b>Classe:</b> {parsed.summary.classe} <br />
                       <b>Nombre élèves:</b> {parsed.summary.nbEleves}
@@ -273,6 +374,17 @@ const FetchGrades: React.FC = () => {
                       <b>Note examen:</b> {parsed.noteExamen}
                     </Typography>
                   )}
+                </Box>
+                <Box sx={{ mt: 4, mb: 2, display: 'flex', justifyContent: 'center', animation: 'fadeIn 1s' }}>
+                  <canvas ref={chartRef} width={400} height={400} style={{ maxWidth: '100%' }} />
+                </Box>
+                <Box sx={{ display: 'flex', gap: 2, mb: 2, justifyContent: 'center' }}>
+                  <Button variant="outlined" color="secondary" onClick={() => downloadCSV(parsed)}>
+                    Export to CSV
+                  </Button>
+                  <Button variant="outlined" color="primary" onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})}>
+                    Scroll to Top 🚀
+                  </Button>
                 </Box>
               </Box>
             )}
